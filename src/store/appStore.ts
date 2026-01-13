@@ -1,103 +1,140 @@
 import { create } from 'zustand';
 
+import api from '../api';
 import type { AppData, ITab } from '../types';
-import { getAppData, saveAppData } from '../utils/storage-utils';
 
 interface AppStoreState extends AppData {
+  unsavedTabs: Set<number>;
   setCurrentTabId: (id: number) => void;
-  createTab: () => number;
-  updateTab: (id: number, updatedTab: Partial<ITab>) => void;
-  deleteTab: (tabId: number) => void;
+  createTab: () => Promise<number>;
+  updateTabLocal: (id: number, updatedTab: Partial<ITab>) => void;
+  saveTab: (id: number) => Promise<void>;
+  deleteTab: (tabId: number) => Promise<void>;
+  fetchTabs: () => Promise<void>;
+  hasUnsavedChanges: (id: number) => boolean;
 }
 
-const defaultAppData: AppData = {
-  tabs: [
-    {
-      id: 0,
-      title: 'Tab 1',
-      elements: [],
-      appState: {},
-    },
-  ],
-  currentTabId: 0,
-};
-
-export const useAppStore = create<AppStoreState>()((set) => {
-  const storedData = getAppData();
-  const data = storedData || defaultAppData;
-
+export const useAppStore = create<AppStoreState>()((set, get) => {
   return {
-    tabs: data.tabs,
-    currentTabId: data.currentTabId,
+    tabs: [],
+    currentTabId: 0,
+    unsavedTabs: new Set<number>(),
+
+    fetchTabs: async () => {
+      try {
+        const response = await api.get('/tabs');
+        const tabs = response.data.map((tab: any) => ({
+          id: tab.ID,
+          title: tab.title,
+          elements: tab.elements ? JSON.parse(tab.elements) : [],
+          appState: tab.appState ? JSON.parse(tab.appState) : {},
+        }));
+        set({ tabs, currentTabId: tabs.length > 0 ? tabs[0].id : 0, unsavedTabs: new Set() });
+      } catch (error) {
+        console.error('Failed to fetch tabs:', error);
+      }
+    },
 
     setCurrentTabId: (id: number) => {
-      set((state) => {
-        const newAppData: AppData = {
-          tabs: state.tabs,
-          currentTabId: id,
-        };
-        saveAppData(newAppData);
-        return newAppData;
-      });
+      set({ currentTabId: id });
     },
 
-    createTab: () => {
-      let newTabId: number = -1;
-      set((state) => {
-        const maxId =
-          state.tabs.length > 0
-            ? Math.max(...state.tabs.map((tab) => tab.id))
-            : -1;
-        newTabId = maxId + 1;
-
+    createTab: async () => {
+      try {
+        // Restrict to maximum 2 tabs for testing
+        if (get().tabs.length >= 2) {
+          alert('Maximum 2 tabs allowed for testing purposes');
+          return -1;
+        }
+        
+        const newTabTitle = `Tab ${get().tabs.length + 1}`;
+        const response = await api.post('/tabs', {
+          title: newTabTitle,
+          elements: '[]',
+          appState: '{}',
+        });
         const newTab: ITab = {
-          id: newTabId,
-          title: `Tab ${newTabId + 1}`,
+          id: response.data.ID,
+          title: response.data.title,
           elements: [],
           appState: {},
         };
-        const newAppData: AppData = {
+        
+        set((state) => ({
           tabs: [...state.tabs, newTab],
-          currentTabId: state.currentTabId,
-        };
-        saveAppData(newAppData);
-        return newAppData;
-      });
-      return newTabId;
+          currentTabId: newTab.id,
+        }));
+        return newTab.id;
+      } catch (error) {
+        console.error('Failed to create tab:', error);
+        return -1;
+      }
     },
 
-    updateTab: (id: number, updatedTab: Partial<ITab>) => {
-      set((state) => {
-        const newTabs = state.tabs.map((tab) =>
+    updateTabLocal: (id: number, updatedTab: Partial<ITab>) => {
+      // Local update only - mark as unsaved
+      set((state) => ({
+        tabs: state.tabs.map((tab) =>
           tab.id !== id ? tab : { ...tab, ...updatedTab },
-        );
-        const newAppData: AppData = {
-          tabs: newTabs,
-          currentTabId: state.currentTabId,
-        };
-        saveAppData(newAppData);
-        return newAppData;
-      });
+        ),
+        unsavedTabs: new Set([...state.unsavedTabs, id]),
+      }));
     },
 
-    deleteTab: (tabId: number) => {
-      set((state) => {
-        if (state.tabs.length === 1) return state;
+    saveTab: async (id: number) => {
+      try {
+        const tabToSave = get().tabs.find((t) => t.id === id);
+        if (!tabToSave) return;
 
-        const delTabIndex = state.tabs.findIndex((tab) => tab.id === tabId);
-        const newTabs = [...state.tabs];
-        newTabs.splice(delTabIndex, 1);
+        await api.put(`/tabs/${id}`, {
+          title: tabToSave.title,
+          elements: JSON.stringify(tabToSave.elements),
+          appState: JSON.stringify(tabToSave.appState),
+        });
 
-        const newCurrentTabId =
-          delTabIndex > 0 ? newTabs[delTabIndex - 1].id : newTabs[0].id;
+        // Remove from unsaved set
+        set((state) => {
+          const newUnsavedTabs = new Set(state.unsavedTabs);
+          newUnsavedTabs.delete(id);
+          return { unsavedTabs: newUnsavedTabs };
+        });
+      } catch (error) {
+        console.error('Failed to save tab:', error);
+        throw error;
+      }
+    },
 
-        const newAppData: AppData = {
-          tabs: newTabs,
-          currentTabId: newCurrentTabId,
-        };
-        saveAppData(newAppData);
-        return newAppData;
-      });
+    deleteTab: async (tabId: number) => {
+      try {
+        await api.delete(`/tabs/${tabId}`);
+        set((state) => {
+          const delTabIndex = state.tabs.findIndex((tab) => tab.id === tabId);
+          const newTabs = [...state.tabs];
+          newTabs.splice(delTabIndex, 1);
+
+          const newCurrentTabId =
+            newTabs.length > 0
+              ? delTabIndex > 0
+                ? newTabs[delTabIndex - 1].id
+                : newTabs[0].id
+              : 0;
+
+          const newUnsavedTabs = new Set(state.unsavedTabs);
+          newUnsavedTabs.delete(tabId);
+
+          return {
+            tabs: newTabs,
+            currentTabId: newCurrentTabId,
+            unsavedTabs: newUnsavedTabs,
+          };
+        });
+      } catch (error) {
+        console.error('Failed to delete tab:', error);
+      }
+    },
+
+    hasUnsavedChanges: (id: number) => {
+      return get().unsavedTabs.has(id);
     },
   };
 });
