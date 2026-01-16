@@ -1,0 +1,36 @@
+services:
+  # Backend service
+  - type: web
+    name: excalitabs-backend
+    env: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    plan: starter
+    region: oregon
+    branch: main
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: "./database.sqlite"
+    disk:
+      name: sqlite-disk
+      mountPath: /root
+      sizeGB: 1
+
+  # Frontend service  
+  - type: web
+    name: excalitabs-frontend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: oregon
+    branch: main
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: excalitabs-backend
+          property: host

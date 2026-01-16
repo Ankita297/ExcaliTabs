@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ankita123456ankita/excalitabs-backend:latest
+    # For local development, you can use:
+    # build: ./server
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=./database.sqlite
+      - PORT=8080
+      - JWT_SECRET=your-jwt-secret-key
+    volumes:
+      - ./server/database.sqlite:/root/database.sqlite
+    networks:
+      - excalitabs-network
+
+  frontend:
+    image: ankita123456ankita/excalitabs-frontend:latest
+    # For local development, you can use:
+    # build: .
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - excalitabs-network
+
+networks:
+  excalitabs-network:
+    driver: bridge
+
+volumes:
+  sqlite_data:

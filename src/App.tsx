@@ -1,23 +1,17 @@
 import { Excalidraw } from '@excalidraw/excalidraw';
 import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type { AppState } from '@excalidraw/excalidraw/types';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 
-import Login from './components/Auth/Login';
-import Register from './components/Auth/Register';
 import TabBar from './components/TabBar';
 import { useAppStore } from './store';
 
 function App() {
   const { tabs, currentTabId, updateTabLocal, fetchTabs, hasUnsavedChanges } = useAppStore();
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
-  const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchTabs();
-    }
-  }, [isAuthenticated, fetchTabs]);
+    fetchTabs();
+  }, [fetchTabs]);
 
   // Warn user before closing page with unsaved changes
   useEffect(() => {
@@ -56,23 +50,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentTabId],
   );
-
-  if (!isAuthenticated) {
-    if (isRegistering) {
-      return (
-        <Register
-          onRegisterSuccess={() => setIsRegistering(false)}
-          onSwitchToLogin={() => setIsRegistering(false)}
-        />
-      );
-    }
-    return (
-      <Login
-        onLoginSuccess={() => setIsAuthenticated(true)}
-        onSwitchToRegister={() => setIsRegistering(true)}
-      />
-    );
-  }
 
   if (!currentTab) {
     return (

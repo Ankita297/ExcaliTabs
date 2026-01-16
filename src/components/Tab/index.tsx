@@ -16,7 +16,7 @@ interface FormData {
 }
 
 const Tab = ({ tab }: TabProps) => {
-  const { currentTabId, setCurrentTabId, updateTab, deleteTab } = useAppStore();
+  const { currentTabId, setCurrentTabId, updateTabLocal, deleteTab } = useAppStore();
   const [isEditing, setIsEditing] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<FormData>({
@@ -48,7 +48,7 @@ const Tab = ({ tab }: TabProps) => {
     const trimmedTitle = data.title.trim();
     if (trimmedTitle && trimmedTitle !== tab.title) {
       const newTab = { ...tab, title: trimmedTitle };
-      updateTab(tab.id, newTab);
+      updateTabLocal(tab.id, newTab);
     }
     setIsEditing(false);
   };

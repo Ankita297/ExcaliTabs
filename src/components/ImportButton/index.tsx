@@ -25,7 +25,7 @@ const schema = z.object({
 const ImportModal = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const { createTab, updateTab, setCurrentTabId } = useAppStore();
+  const { createTab, updateTabLocal, setCurrentTabId } = useAppStore();
 
   const {
     handleSubmit,
@@ -47,7 +47,11 @@ const ImportModal = () => {
     try {
       const excalidrawBoard = await getExcalidrawBoard(excalidrawUrl);
 
-      const newTabId = createTab();
+      const newTabId = await createTab();
+
+      if (newTabId === -1) {
+        return; // Maximum tabs reached
+      }
 
       const newTabData: ITab = {
         id: newTabId,
@@ -58,7 +62,7 @@ const ImportModal = () => {
         },
       };
 
-      updateTab(newTabId, newTabData);
+      updateTabLocal(newTabId, newTabData);
       setCurrentTabId(newTabId);
       setIsModalOpen(false);
       reset();

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import api from '../api';
 import type { AppData, ITab } from '../types';
+import { localDB } from '../utils/localDB';
 
 interface AppStoreState extends AppData {
   unsavedTabs: Set<number>;
@@ -22,13 +22,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => {
 
     fetchTabs: async () => {
       try {
-        const response = await api.get('/tabs');
-        const tabs = response.data.map((tab: any) => ({
-          id: tab.ID,
-          title: tab.title,
-          elements: tab.elements ? JSON.parse(tab.elements) : [],
-          appState: tab.appState ? JSON.parse(tab.appState) : {},
-        }));
+        const tabs = await localDB.getAllTabs();
         set({ tabs, currentTabId: tabs.length > 0 ? tabs[0].id : 0, unsavedTabs: new Set() });
       } catch (error) {
         console.error('Failed to fetch tabs:', error);
@@ -41,21 +35,16 @@ export const useAppStore = create<AppStoreState>()((set, get) => {
 
     createTab: async () => {
       try {
-        // Restrict to maximum 2 tabs for testing
-        if (get().tabs.length >= 2) {
-          alert('Maximum 2 tabs allowed for testing purposes');
-          return -1;
-        }
-        
         const newTabTitle = `Tab ${get().tabs.length + 1}`;
-        const response = await api.post('/tabs', {
+        const newTabId = await localDB.createTab({
           title: newTabTitle,
-          elements: '[]',
-          appState: '{}',
+          elements: [],
+          appState: {},
         });
+        
         const newTab: ITab = {
-          id: response.data.ID,
-          title: response.data.title,
+          id: newTabId,
+          title: newTabTitle,
           elements: [],
           appState: {},
         };
@@ -86,11 +75,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => {
         const tabToSave = get().tabs.find((t) => t.id === id);
         if (!tabToSave) return;
 
-        await api.put(`/tabs/${id}`, {
-          title: tabToSave.title,
-          elements: JSON.stringify(tabToSave.elements),
-          appState: JSON.stringify(tabToSave.appState),
-        });
+        await localDB.updateTab(tabToSave);
 
         // Remove from unsaved set
         set((state) => {
@@ -106,7 +91,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => {
 
     deleteTab: async (tabId: number) => {
       try {
-        await api.delete(`/tabs/${tabId}`);
+        await localDB.deleteTab(tabId);
         set((state) => {
           const delTabIndex = state.tabs.findIndex((tab) => tab.id === tabId);
           const newTabs = [...state.tabs];
